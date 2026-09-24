@@ -10,6 +10,8 @@
   <script src="https://unpkg.com/lucide@latest"></script>
   <!-- SheetJS para importación/exportación de Excel -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <!-- Supabase JS Client SDK -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script>
     tailwind.config = {
       theme: {
@@ -55,7 +57,7 @@
           </div>
           <div>
             <h1 class="text-lg font-bold text-slate-900 leading-tight">El Profe Auto Stereo</h1>
-            <p class="text-xs font-semibold text-brand-600 uppercase tracking-wider">Sistema Integral de Inventario & POS</p>
+            <p class="text-xs font-semibold text-brand-600 uppercase tracking-wider">Sistema Integral con Supabase & POS</p>
           </div>
         </div>
 
@@ -502,7 +504,7 @@
       </div>
     </section>
 
-    <!-- SECCIÓN 9: AJUSTES Y BACKUP/RESTORE -->
+    <!-- SECCIÓN 9: AJUSTES Y CONFIGURACIÓN -->
     <section id="tab-settings" class="tab-content hidden max-w-3xl mx-auto space-y-6">
       <!-- SUCURSALES DINÁMICAS -->
       <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
@@ -521,23 +523,6 @@
           <div id="settings-branch-list">
             <!-- Lista inyectada por JS -->
           </div>
-        </div>
-      </div>
-
-      <!-- RESPALDO DE DATOS -->
-      <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
-        <h2 class="text-lg font-bold text-slate-800 border-b pb-3 flex items-center gap-2">
-          <i data-lucide="database" class="w-5 h-5 text-brand-600"></i> Respaldo y Base de Datos (Backup / Restore)
-        </h2>
-        <p class="text-xs text-slate-500">Descarga una copia completa de tu información o restáurala en otro equipo.</p>
-        <div class="flex gap-3">
-          <button onclick="backupDatabase()" class="bg-slate-800 hover:bg-slate-900 text-white px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-1">
-            <i data-lucide="download-cloud" class="w-4 h-4"></i> Descargar Respaldo JSON
-          </button>
-          <label class="cursor-pointer bg-slate-200 hover:bg-slate-300 text-slate-800 px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-1">
-            <i data-lucide="upload-cloud" class="w-4 h-4"></i> Restaurar Respaldo JSON
-            <input type="file" accept=".json" onchange="restoreDatabase(event)" class="hidden">
-          </label>
         </div>
       </div>
 
@@ -651,42 +636,70 @@
     <p class="text-center text-[10px] mt-4">¡Gracias por su preferencia!</p>
   </div>
 
-  <!-- JAVASCRIPT DEL SISTEMA -->
+  <!-- JAVASCRIPT CON INTEGRACIÓN DE SUPABASE -->
   <script>
-    let branches = ["Matriz", "Isla del Bosque"];
+    // Configuración de Supabase (Reemplaza con tus llaves reales)
+    const SUPABASE_URL = 'https://TU_SUPABASE_URL.supabase.co';
+    const SUPABASE_KEY = 'TU_SUPABASE_ANON_KEY';
+    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    let branches = [];
     let products = [];
     let movements = [];
     let posCart = [];
 
-    const initialSampleData = [
-      { id: "1", sku: "TWEET-01", description: "BASE INDIVIDUAL PARA TWEETER BALA VINIL", branch: "Matriz", unit: "PAR", cost: 100, price: 200, minStock: 2, entries: 4, exits: 1, stock: 3 },
-      { id: "2", sku: "TWEET-02", description: "BASE INDIVIDUAL PARA TWEETER BALA PLASTICO", branch: "Matriz", unit: "PAR", cost: 80, price: 150, minStock: 2, entries: 5, exits: 1, stock: 4 },
-      { id: "3", sku: "WAR-68", description: "WARAUDIO CABO68", branch: "Isla del Bosque", unit: "PZ", cost: 140, price: 250, minStock: 1, entries: 1, exits: 0, stock: 1 },
-      { id: "4", sku: "Q-800", description: "QUANTUM QEA800.4", branch: "Isla del Bosque", unit: "PZ", cost: 800, price: 1200, minStock: 1, entries: 1, exits: 0, stock: 1 }
-    ];
-
-    window.addEventListener('DOMContentLoaded', () => {
-      loadStorageData();
-      renderAll();
+    window.addEventListener('DOMContentLoaded', async () => {
+      await loadStorageData();
       loadLogo();
       lucide.createIcons();
     });
 
-    function loadStorageData() {
-      const savedBranches = localStorage.getItem('profe_branches');
-      const savedProducts = localStorage.getItem('profe_products');
-      const savedMovements = localStorage.getItem('profe_movements');
+    async function loadStorageData() {
+      // 1. Cargar Sucursales
+      let { data: bData, error: bErr } = await supabaseClient.from('branches').select('*').order('name');
+      if (bData && bData.length > 0) {
+        branches = bData.map(b => b.name);
+      } else {
+        branches = ["Matriz", "Isla del Bosque"];
+      }
 
-      branches = savedBranches ? JSON.parse(savedBranches) : ["Matriz", "Isla del Bosque"];
-      products = savedProducts ? JSON.parse(savedProducts) : initialSampleData;
-      movements = savedMovements ? JSON.parse(savedMovements) : [];
-      saveToStorage();
-    }
+      // 2. Cargar Productos
+      let { data: pData, error: pErr } = await supabaseClient.from('products').select('*').order('description');
+      if (pData) {
+        products = pData.map(p => ({
+          id: p.id,
+          sku: p.sku || '',
+          description: p.description,
+          branch: p.branch,
+          unit: p.unit || 'PZ',
+          cost: parseFloat(p.cost) || 0,
+          price: parseFloat(p.price) || 0,
+          stock: p.stock || 0,
+          minStock: p.min_stock || 1,
+          entries: p.entries || 0,
+          exits: p.exits || 0
+        }));
+      }
 
-    function saveToStorage() {
-      localStorage.setItem('profe_branches', JSON.stringify(branches));
-      localStorage.setItem('profe_products', JSON.stringify(products));
-      localStorage.setItem('profe_movements', JSON.stringify(movements));
+      // 3. Cargar Movimientos / Historial
+      let { data: mData, error: mErr } = await supabaseClient.from('movements').select('*').order('date', { ascending: false });
+      if (mData) {
+        movements = mData.map(m => ({
+          id: m.id,
+          date: new Date(m.date).toLocaleString('es-MX'),
+          type: m.type,
+          productId: m.product_id,
+          productName: m.product_name,
+          branch: m.branch,
+          qty: m.qty,
+          payMethod: m.pay_method,
+          totalPrice: parseFloat(m.total_price) || 0,
+          person: m.person,
+          notes: m.notes
+        }));
+      }
+
+      renderAll();
     }
 
     function renderAll() {
@@ -753,7 +766,6 @@
         .reduce((a, m) => a + (m.totalPrice || 0), 0);
       document.getElementById('stat-today-sales').innerText = `$${todaySales.toLocaleString('es-MX', {minimumFractionDigits: 2})}`;
 
-      // Resumen por Sucursal
       const branchContainer = document.getElementById('branch-summary-list');
       branchContainer.innerHTML = branches.map(b => {
         const bProds = products.filter(p => p.branch === b);
@@ -769,7 +781,6 @@
         `;
       }).join('');
 
-      // Pocas existencias
       const lowStockBody = document.getElementById('low-stock-list');
       lowStockBody.innerHTML = lowStockProds.map(p => `
         <tr class="hover:bg-slate-50">
@@ -824,7 +835,7 @@
 
     function closeProductModal() { document.getElementById('product-modal').classList.add('hidden'); }
 
-    function saveProduct(e) {
+    async function saveProduct(e) {
       e.preventDefault();
       const id = document.getElementById('prod-id').value;
       const sku = document.getElementById('prod-sku').value;
@@ -836,16 +847,26 @@
       const stock = parseInt(document.getElementById('prod-stock').value) || 0;
       const minStock = parseInt(document.getElementById('prod-min-stock').value) || 1;
 
+      const payload = {
+        sku,
+        description: desc,
+        branch,
+        unit,
+        cost,
+        price,
+        stock,
+        min_stock: minStock
+      };
+
       if (id) {
-        const prod = products.find(p => p.id === id);
-        if (prod) Object.assign(prod, { sku, description: desc, branch, unit, cost, price, stock, minStock });
+        await supabaseClient.from('products').update(payload).eq('id', id);
       } else {
-        products.push({ id: Date.now().toString(), sku, description: desc, branch, unit, cost, price, entries: stock, exits: 0, stock, minStock });
+        payload.entries = stock;
+        await supabaseClient.from('products').insert([payload]);
       }
 
-      saveToStorage();
       closeProductModal();
-      renderAll();
+      await loadStorageData();
     }
 
     function editProduct(id) {
@@ -864,11 +885,10 @@
       document.getElementById('product-modal').classList.remove('hidden');
     }
 
-    function deleteProduct(id) {
-      if (confirm('¿Eliminar este producto?')) {
-        products = products.filter(p => p.id !== id);
-        saveToStorage();
-        renderAll();
+    async function deleteProduct(id) {
+      if (confirm('¿Eliminar este producto permanentemente de Supabase?')) {
+        await supabaseClient.from('products').delete().eq('id', id);
+        await loadStorageData();
       }
     }
 
@@ -940,7 +960,7 @@
       renderCart();
     }
 
-    function processPOSSale() {
+    async function processPOSSale() {
       if (posCart.length === 0) return alert('El carrito está vacío.');
       const customer = document.getElementById('pos-customer').value || 'Cliente Mostrador';
       const branch = document.getElementById('pos-branch').value;
@@ -950,28 +970,31 @@
       let subtotalSum = posCart.reduce((a, item) => a + (item.price * item.qty), 0);
       let totalFinal = Math.max(0, subtotalSum - discount);
 
-      posCart.forEach(item => {
+      for (const item of posCart) {
         const prod = products.find(p => p.id === item.id);
         if (prod) {
-          prod.stock -= item.qty;
-          prod.exits = (prod.exits || 0) + item.qty;
-          movements.push({
-            id: Date.now().toString(),
-            date: new Date().toLocaleDateString('es-MX') + ' ' + new Date().toLocaleTimeString('es-MX'),
+          const newStock = prod.stock - item.qty;
+          const newExits = (prod.exits || 0) + item.qty;
+
+          // Actualizar en Supabase
+          await supabaseClient.from('products').update({ stock: newStock, exits: newExits }).eq('id', prod.id);
+
+          // Registrar movimiento en Supabase
+          await supabaseClient.from('movements').insert([{
             type: 'SALIDA (VENTA)',
-            productId: prod.id,
-            productName: prod.description,
+            product_id: prod.id,
+            product_name: prod.description,
             branch,
             qty: item.qty,
-            payMethod,
-            totalPrice: (item.price * item.qty),
+            pay_method: payMethod,
+            total_price: (item.price * item.qty),
             person: customer,
             notes: `Venta POS - ${payMethod}`
-          });
+          }]);
         }
-      });
+      }
 
-      // Formato Ticket
+      // Ticket
       document.getElementById('ticket-branch-name').innerText = `Sucursal ${branch}`;
       document.getElementById('ticket-date').innerText = new Date().toLocaleString('es-MX');
       document.getElementById('ticket-customer').innerText = `Cliente: ${customer}`;
@@ -992,11 +1015,10 @@
 
       document.getElementById('ticket-total').innerText = `$${totalFinal.toFixed(2)}`;
 
-      saveToStorage();
       posCart = [];
       document.getElementById('pos-customer').value = '';
       document.getElementById('pos-discount').value = '0';
-      renderAll();
+      await loadStorageData();
       window.print();
     }
 
@@ -1040,7 +1062,7 @@
     }
 
     function saveCashCut() {
-      alert('Arqueo y cierre registrado correctamente.');
+      alert('Arqueo registrado.');
     }
 
     // TRASPASOS
@@ -1054,7 +1076,7 @@
       `).join('') || '<option value="">Sin stock suficiente</option>';
     }
 
-    function handleTransferSubmit(e) {
+    async function handleTransferSubmit(e) {
       e.preventDefault();
       const fromBranch = document.getElementById('transfer-from-branch').value;
       const toBranch = document.getElementById('transfer-to-branch').value;
@@ -1066,16 +1088,21 @@
       const srcProd = products.find(p => p.id === prodId);
       if (!srcProd || srcProd.stock < qty) return alert('Stock insuficiente.');
 
-      srcProd.stock -= qty;
-      srcProd.exits = (srcProd.exits || 0) + qty;
+      // Descontar origen
+      await supabaseClient.from('products').update({
+        stock: srcProd.stock - qty,
+        exits: (srcProd.exits || 0) + qty
+      }).eq('id', srcProd.id);
 
+      // Aumentar o crear destino
       let destProd = products.find(p => p.branch === toBranch && p.description.toLowerCase() === srcProd.description.toLowerCase());
       if (destProd) {
-        destProd.stock += qty;
-        destProd.entries = (destProd.entries || 0) + qty;
+        await supabaseClient.from('products').update({
+          stock: destProd.stock + qty,
+          entries: (destProd.entries || 0) + qty
+        }).eq('id', destProd.id);
       } else {
-        products.push({
-          id: Date.now().toString(),
+        await supabaseClient.from('products').insert([{
           sku: srcProd.sku,
           description: srcProd.description,
           branch: toBranch,
@@ -1085,24 +1112,22 @@
           entries: qty,
           exits: 0,
           stock: qty,
-          minStock: srcProd.minStock
-        });
+          min_stock: srcProd.minStock
+        }]);
       }
 
-      movements.push({
-        id: Date.now().toString(),
-        date: new Date().toLocaleDateString('es-MX') + ' ' + new Date().toLocaleTimeString('es-MX'),
+      // Historial
+      await supabaseClient.from('movements').insert([{
         type: 'TRASPASO',
-        productId: srcProd.id,
-        productName: srcProd.description,
+        product_id: srcProd.id,
+        product_name: srcProd.description,
         branch: `${fromBranch} -> ${toBranch}`,
         qty,
         person,
         notes: 'Traspaso entre sucursales'
-      });
+      }]);
 
-      saveToStorage();
-      renderAll();
+      await loadStorageData();
       alert('Traspaso exitoso.');
     }
 
@@ -1114,7 +1139,7 @@
       `).join('');
     }
 
-    function handleReturnSubmit(e) {
+    async function handleReturnSubmit(e) {
       e.preventDefault();
       const prodId = document.getElementById('return-product-id').value;
       const qty = parseInt(document.getElementById('return-qty').value) || 1;
@@ -1125,24 +1150,23 @@
       if (!prod) return;
 
       if (destination === 'STOCK') {
-        prod.stock += qty;
-        prod.entries = (prod.entries || 0) + qty;
+        await supabaseClient.from('products').update({
+          stock: prod.stock + qty,
+          entries: (prod.entries || 0) + qty
+        }).eq('id', prod.id);
       }
 
-      movements.push({
-        id: Date.now().toString(),
-        date: new Date().toLocaleDateString('es-MX') + ' ' + new Date().toLocaleTimeString('es-MX'),
+      await supabaseClient.from('movements').insert([{
         type: 'GARANTÍA / DEVOLUCIÓN',
-        productId: prod.id,
-        productName: prod.description,
+        product_id: prod.id,
+        product_name: prod.description,
         branch: prod.branch,
         qty,
         person: 'Garantía',
         notes: `Destino: ${destination} - Motivo: ${reason}`
-      });
+      }]);
 
-      saveToStorage();
-      renderAll();
+      await loadStorageData();
       alert('Garantía procesada correctamente.');
     }
 
@@ -1154,7 +1178,7 @@
       `).join('');
     }
 
-    function handleMovementSubmit(e) {
+    async function handleMovementSubmit(e) {
       e.preventDefault();
       const type = document.querySelector('input[name="mov_type"]:checked').value;
       const prodId = document.getElementById('mov-product-id').value;
@@ -1168,28 +1192,29 @@
       if (type === 'SALIDA' && qty > prod.stock) return alert('Stock insuficiente.');
 
       if (type === 'ENTRADA') {
-        prod.stock += qty;
-        prod.entries = (prod.entries || 0) + qty;
+        await supabaseClient.from('products').update({
+          stock: prod.stock + qty,
+          entries: (prod.entries || 0) + qty
+        }).eq('id', prod.id);
       } else {
-        prod.stock -= qty;
-        prod.exits = (prod.exits || 0) + qty;
+        await supabaseClient.from('products').update({
+          stock: prod.stock - qty,
+          exits: (prod.exits || 0) + qty
+        }).eq('id', prod.id);
       }
 
-      movements.push({
-        id: Date.now().toString(),
-        date: new Date().toLocaleDateString('es-MX') + ' ' + new Date().toLocaleTimeString('es-MX'),
+      await supabaseClient.from('movements').insert([{
         type,
-        productId: prod.id,
-        productName: prod.description,
+        product_id: prod.id,
+        product_name: prod.description,
         branch: prod.branch,
         qty,
         person,
         notes
-      });
+      }]);
 
-      saveToStorage();
       document.getElementById('movement-form').reset();
-      renderAll();
+      await loadStorageData();
       switchTab('history');
     }
 
@@ -1208,46 +1233,44 @@
       `).join('') || '<tr><td colspan="7" class="p-4 text-center text-slate-400">Sin movimientos.</td></tr>';
     }
 
-    function clearHistory() {
-      if (confirm('¿Limpiar historial?')) {
-        movements = [];
-        saveToStorage();
-        renderHistory();
+    async function clearHistory() {
+      if (confirm('¿Limpiar historial permanentemente en Supabase?')) {
+        await supabaseClient.from('movements').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+        await loadStorageData();
       }
     }
 
-    // SUCURSALES
-    function addBranch(e) {
+    // SUCURSALES EN SUPABASE
+    async function addBranch(e) {
       e.preventDefault();
       const input = document.getElementById('new-branch-name');
       const name = input.value.trim();
       if (!name) return;
       if (branches.includes(name)) return alert('Esta sucursal ya existe.');
 
-      branches.push(name);
-      saveToStorage();
+      const { error } = await supabaseClient.from('branches').insert([{ name }]);
+      if (error) return alert('Error al crear sucursal: ' + error.message);
+
       input.value = '';
-      renderAll();
+      await loadStorageData();
     }
 
-    function deleteBranch(branchName) {
+    async function deleteBranch(branchName) {
       if (branches.length <= 1) return alert('Conserva al menos una sucursal.');
       
       const prodsInBranch = products.filter(p => p.branch === branchName);
-      let targetBranch = null;
 
       if (prodsInBranch.length > 0) {
         const otherBranches = branches.filter(b => b !== branchName);
-        const selected = prompt(`La sucursal '${branchName}' tiene ${prodsInBranch.length} productos.\nEscribe el nombre de la sucursal destino:\n${otherBranches.join(', ')}`);
+        const selected = prompt(`La sucursal '${branchName}' tiene ${prodsInBranch.length} productos.\nEscribe la sucursal de destino:\n${otherBranches.join(', ')}`);
         
         if (!selected || !otherBranches.includes(selected)) return alert('Cancelado.');
-        targetBranch = selected;
-        prodsInBranch.forEach(p => p.branch = targetBranch);
+        
+        await supabaseClient.from('products').update({ branch: selected }).eq('branch', branchName);
       }
 
-      branches = branches.filter(b => b !== branchName);
-      saveToStorage();
-      renderAll();
+      await supabaseClient.from('branches').delete().eq('name', branchName);
+      await loadStorageData();
     }
 
     function renderBranchSettingsList() {
@@ -1263,66 +1286,26 @@
       lucide.createIcons();
     }
 
-    // BACKUP & RESTORE JSON
-    function backupDatabase() {
-      const backupData = {
-        branches,
-        products,
-        movements,
-        version: "2.0",
-        exportDate: new Date().toISOString()
-      };
-      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(backupData, null, 2));
-      const downloadAnchor = document.createElement('a');
-      downloadAnchor.setAttribute("href", dataStr);
-      downloadAnchor.setAttribute("download", `RESPALDO_EL_PROFE_${new Date().toISOString().slice(0,10)}.json`);
-      document.body.appendChild(downloadAnchor);
-      downloadAnchor.click();
-      downloadAnchor.remove();
-    }
-
-    function restoreDatabase(e) {
-      const file = e.target.files[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = (evt) => {
-        try {
-          const restored = JSON.parse(evt.target.result);
-          if (restored.branches && restored.products) {
-            branches = restored.branches;
-            products = restored.products;
-            movements = restored.movements || [];
-            saveToStorage();
-            renderAll();
-            alert('Base de datos restaurada con éxito.');
-          } else {
-            alert('El archivo no contiene un formato válido.');
-          }
-        } catch (err) {
-          alert('Error al leer el archivo JSON.');
-        }
-      };
-      reader.readAsText(file);
-    }
-
-    // IMPORTACIÓN & EXPORTACIÓN EXCEL
+    // IMPORTACIÓN & EXPORTACIÓN EXCEL CON SUPABASE
     function importExcel(e) {
       const file = e.target.files[0];
       if (!file) return;
 
       const reader = new FileReader();
-      reader.onload = (evt) => {
+      reader.onload = async (evt) => {
         const data = new Uint8Array(evt.target.result);
         const workbook = XLSX.read(data, { type: 'array' });
         let importedProducts = [];
 
-        workbook.SheetNames.forEach(sheetName => {
+        for (const sheetName of workbook.SheetNames) {
           const sheet = workbook.Sheets[sheetName];
           const json = XLSX.utils.sheet_to_json(sheet, { header: 1 });
           const isIsla = sheetName.toLowerCase().includes('hoja1') || sheetName.toLowerCase().includes('isla');
           const defaultBranch = isIsla ? 'Isla del Bosque' : 'Matriz';
 
-          if (!branches.includes(defaultBranch)) branches.push(defaultBranch);
+          if (!branches.includes(defaultBranch)) {
+            await supabaseClient.from('branches').insert([{ name: defaultBranch }]);
+          }
 
           for (let i = 2; i < json.length; i++) {
             const row = json[i];
@@ -1337,7 +1320,6 @@
             const stock = parseInt(row[6]) || (entries - exits >= 0 ? entries - exits : 0);
 
             importedProducts.push({
-              id: `${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
               sku: `EXCEL-${i}`,
               description: desc,
               branch: defaultBranch,
@@ -1347,16 +1329,15 @@
               entries,
               exits,
               stock,
-              minStock: 1
+              min_stock: 1
             });
           }
-        });
+        }
 
         if (importedProducts.length > 0) {
-          products = importedProducts;
-          saveToStorage();
-          renderAll();
-          alert(`Importados ${importedProducts.length} productos con éxito.`);
+          await supabaseClient.from('products').insert(importedProducts);
+          await loadStorageData();
+          alert(`Importados ${importedProducts.length} productos con éxito a Supabase.`);
         }
       };
       reader.readAsArrayBuffer(file);
@@ -1382,7 +1363,7 @@
       XLSX.writeFile(workbook, "INVENTARIO_EL_PROFE.xlsx");
     }
 
-    // LOGO
+    // LOGO LOCALSTORAGE
     function uploadLogo(e) {
       const file = e.target.files[0];
       if (!file) return;
